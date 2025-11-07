@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  # C'est le nom de ton "service" de développement
+  dev:
+    # Construire l'image à partir du Dockerfile dans ce dossier
+    build: .
+    # Nommer le conteneur pour le retrouver facilement
+    container_name: parking_dev
+    # C'est la partie la plus importante :
+    # "Monte" le dossier actuel ('.') dans le dossier '/app' du conteneur
+    volumes:
+      - .:/app

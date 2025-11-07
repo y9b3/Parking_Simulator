@@ -1,0 +1,13 @@
+# Ignorer Git
+.git
+.gitignore
+
+# Ignorer les fichiers de build locaux
+*.o
+parking_simulator
+bin/
+obj/
+
+# Ignorer les fichiers d'IDE
+.vscode/
+.idea/
