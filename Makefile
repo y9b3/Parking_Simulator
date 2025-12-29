@@ -19,7 +19,10 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 
 # Fichiers sources (.c) à compiler
 # Vous devrez ajouter d'autres fichiers .c ici au fur et à mesure de l'avancement
-SRCS = src/main.c src/parking.c 
+# Fichiers sources (.c) à compiler
+SRCS = src/main.c src/parking.c src/Vehicule.c src/chargementvehicule.c 
+
+
 
 # Fichiers objets (.o) générés à partir des sources
 OBJS = $(SRCS:.c=.o)
