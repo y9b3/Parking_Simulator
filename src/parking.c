@@ -1,7 +1,10 @@
+#define _XOPEN_SOURCE 700
+#define SPOT_VISUAL_Y_OFFSET (-5)
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/parking.h"
-#define SPOT_Y_OFFSET 1
+#include <locale.h>
+#include <wchar.h>
+#include "parking.h"
 #define RESET "\033[0m"
 #define CLEAR_SCREEN "\033[2J"
 #define CURSOR_HOME "\033[H"
@@ -52,12 +55,10 @@ void init_spots_from_map(const char *filename)
         exit(EXIT_FAILURE);
     }
 
-    int x = 0;
-    int y = 0;
+    int x = 0, y = 0, idx = 0;
     int byte;
-    int idx = 0;
 
-    while ((byte = fgetc(file)) != EOF && idx < TOTAL_SPOTS)
+    while ((byte = fgetc(file)) != EOF)
     {
         unsigned char c = (unsigned char)byte;
 
@@ -68,26 +69,32 @@ void init_spots_from_map(const char *filename)
             continue;
         }
 
-        // si ce n'est pas un octet de continuation UTF-8
+        // on ne compte qu'une colonne par caractère affiché (UTF-8: on ignore les octets de continuation)
         if ((c & 0xC0) != 0x80)
         {
-            if (c == SPOT_CHAR)
+            if (c == (unsigned char)SPOT_CHAR)
             {
+                if (idx >= TOTAL_SPOTS)
+                    break;
                 all_spots[idx].screen_x = x;
-
-                // on remonte toutes les places d'une ligne
-                all_spots[idx].screen_y = (y >= SPOT_Y_OFFSET) ? y - SPOT_Y_OFFSET : 0;
-
+                all_spots[idx].screen_y = y + SPOT_VISUAL_Y_OFFSET;
+                if (all_spots[idx].screen_y < 0)
+                    all_spots[idx].screen_y = 0;
                 all_spots[idx].is_occupied = 0;
                 idx++;
             }
 
-            // on avance d'une colonne d'affichage
             x++;
         }
     }
 
     fclose(file);
+
+    if (idx != TOTAL_SPOTS)
+    {
+        fprintf(stderr, "Erreur: spots trouvés=%d, attendu=%d\n", idx, TOTAL_SPOTS);
+        exit(EXIT_FAILURE);
+    }
 }
 
 void draw_spot(ParkingSpot spot, int is_selected)
@@ -98,10 +105,12 @@ void draw_spot(ParkingSpot spot, int is_selected)
 
     // paramètres du bloc
     int width = 1;  // largeur horizontale
-    int height = 2; // HAUTEUR verticale
+    int height = 3; // HAUTEUR verticale
 
     int base_x = spot.screen_x;
-    int base_y = spot.screen_y; // ⚠️ on ANCRE en haut, on ne centre plus
+    int base_y = spot.screen_y - (height / 2); // donc y-1 quand height=3
+    if (base_y < 0)
+        base_y = 0;
 
     for (int dy = 0; dy < height; dy++)
     {
