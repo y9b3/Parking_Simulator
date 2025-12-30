@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <locale.h>
 #include <wchar.h>
-#include "parking.h"
+#include "../include/parking.h" // Vérifie que le chemin est bon vers ton .h
 
 #define RESET "\033[0m"
 #define CLEAR_SCREEN "\033[2J"
@@ -17,7 +17,7 @@
 #define BG_RED "\033[41m"   // fond rouge
 
 // caractère qui marque une place dans parking_map.txt
-#define SPOT_CHAR '@' // ou 'P' si tu es repassé aux P
+#define SPOT_CHAR '@' 
 
 // =====================
 //      VÉHICULES
@@ -26,28 +26,28 @@
 typedef struct {
     int id;
     int largeur;
-    const char *forme[3]; // hauteur 3 lignes (comme draw_spot)
+    const char *forme[3]; // hauteur 3 lignes
 } ModeleVehicule;
 
 ModeleVehicule modeles[3];
 
 void init_modeles(void)
 {
-    // 1. Voiture standard
+    // 1. Voiture standard (Type 0)
     modeles[0].id = 0;
     modeles[0].largeur = 9;
     modeles[0].forme[0] = "┌═╦═════╗";
     modeles[0].forme[1] = "║ ║▆    ║";
     modeles[0].forme[2] = "└═╩═════╝";
 
-    // 2. Camionnette
+    // 2. Camionnette (Type 1)
     modeles[1].id = 1;
     modeles[1].largeur = 12;
     modeles[1].forme[0] = "╔════════╦═┐";
     modeles[1].forme[1] = "║       ▅║ │";
     modeles[1].forme[2] = "╚════════╩═┘";
 
-    // 3. Compacte
+    // 3. Compacte (Type 2)
     modeles[2].id = 2;
     modeles[2].largeur = 10;
     modeles[2].forme[0] = "┌──┬───┬─╗";
@@ -125,6 +125,7 @@ void init_spots_from_map(const char *filename)
                     all_spots[idx].screen_y = 0;
 
                 all_spots[idx].is_occupied = 0;
+                all_spots[idx].type_vehicule = 0; // IMPORTANT : Init à 0 par sécurité
                 idx++;
             }
             x++;
@@ -132,35 +133,51 @@ void init_spots_from_map(const char *filename)
     }
 
     fclose(file);
-
-    if (idx != TOTAL_SPOTS)
-    {
-        fprintf(stderr,
-                "Erreur: spots trouvés=%d, attendu=%d\n",
-                idx, TOTAL_SPOTS);
-        exit(EXIT_FAILURE);
-    }
 }
 
+// =====================
+//   FONCTION MODIFIÉE
+// =====================
 void draw_spot(ParkingSpot spot, int is_selected)
 {
     (void)is_selected;
 
-    const char *bg = spot.is_occupied ? BG_RED : BG_GREEN;
-
-    int width = 1;
     int height = 3;
 
-    int base_x = spot.screen_x;
+    // Calcul de la position Y (verticale)
     int base_y = spot.screen_y - (height / 2);
-    if (base_y < 0)
-        base_y = 0;
+    if (base_y < 0) base_y = 0;
 
-    for (int dy = 0; dy < height; dy++)
-    {
-        goto_xy(base_x, base_y + dy);
-        printf("%s ", bg);
-        printf("%s", RESET);
+    // --- CAS 1 : PLACE OCCUPÉE (On dessine le véhicule) ---
+    if (spot.is_occupied) {
+        
+        // On récupère le type de véhicule stocké dans la place
+        int t = spot.type_vehicule;
+        if (t < 0 || t > 2) t = 0; // Sécurité anti-bug
+        
+        // CENTRAGE :
+        // Le point de la map est au milieu. On doit décaler vers la gauche
+        // de la moitié de la largeur du véhicule pour qu'il soit bien centré.
+        int draw_x = spot.screen_x - (modeles[t].largeur / 2);
+        if (draw_x < 0) draw_x = 0;
+
+        // On dessine les 3 lignes du véhicule
+        for (int dy = 0; dy < height; dy++) {
+            goto_xy(draw_x, base_y + dy);
+            // Affichage en ROUGE du texte ASCII
+            printf("%s%s%s", RED_TEXT, modeles[t].forme[dy], RESET);
+        }
+    } 
+    
+    // --- CAS 2 : PLACE LIBRE (On garde ton carré vert) ---
+    else {
+        int width = 1; 
+        for (int dy = 0; dy < height; dy++) {
+            goto_xy(spot.screen_x, base_y + dy);
+            printf("%s", BG_GREEN); // Fond vert
+            for (int dx = 0; dx < width; dx++) printf(" ");
+            printf("%s", RESET);
+        }
     }
 }
 
