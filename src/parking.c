@@ -1,21 +1,18 @@
 #define _XOPEN_SOURCE 700
-#define SPOT_VISUAL_Y_OFFSET (-5)
 #include <stdio.h>
 #include <stdlib.h>
-#include <locale.h>
-#include <wchar.h>
 #include "parking.h"
+
 #define RESET "\033[0m"
 #define CLEAR_SCREEN "\033[2J"
 #define CURSOR_HOME "\033[H"
-#define GREEN_TEXT "\033[92m"
-#define RED_TEXT "\033[91m"
-#define BLUE_BG "\033[44m"
-#define BG_GREEN "\033[42m" // fond vert
-#define BG_RED "\033[41m"   // fond rouge
 
-// caractère qui marque une place dans parking_map.txt
-#define SPOT_CHAR '@' // ou 'P' si tu es repassé aux P
+// Couleurs (texte)
+#define GREEN_TEXT "\033[32m"
+#define RED_TEXT "\033[31m"
+
+// Caractère qui marque une place dans la map ASCII
+#define SPOT_CHAR 'D'
 
 ParkingSpot all_spots[TOTAL_SPOTS];
 
@@ -56,12 +53,10 @@ void init_spots_from_map(const char *filename)
     }
 
     int x = 0, y = 0, idx = 0;
-    int byte;
+    int c;
 
-    while ((byte = fgetc(file)) != EOF)
+    while ((c = fgetc(file)) != EOF && idx < TOTAL_SPOTS)
     {
-        unsigned char c = (unsigned char)byte;
-
         if (c == '\n')
         {
             y++;
@@ -69,23 +64,15 @@ void init_spots_from_map(const char *filename)
             continue;
         }
 
-        // on ne compte qu'une colonne par caractère affiché (UTF-8: on ignore les octets de continuation)
-        if ((c & 0xC0) != 0x80)
+        if (c == SPOT_CHAR) // 'P'
         {
-            if (c == (unsigned char)SPOT_CHAR)
-            {
-                if (idx >= TOTAL_SPOTS)
-                    break;
-                all_spots[idx].screen_x = x;
-                all_spots[idx].screen_y = y + SPOT_VISUAL_Y_OFFSET;
-                if (all_spots[idx].screen_y < 0)
-                    all_spots[idx].screen_y = 0;
-                all_spots[idx].is_occupied = 0;
-                idx++;
-            }
-
-            x++;
+            all_spots[idx].screen_x = x;
+            all_spots[idx].screen_y = y - 7;
+            all_spots[idx].is_occupied = 0;
+            idx++;
         }
+
+        x++; // ASCII => 1 char = 1 colonne
     }
 
     fclose(file);
@@ -99,28 +86,13 @@ void init_spots_from_map(const char *filename)
 
 void draw_spot(ParkingSpot spot, int is_selected)
 {
-    (void)is_selected;
+    goto_xy(spot.screen_x, spot.screen_y);
 
-    const char *bg = spot.is_occupied ? BG_RED : BG_GREEN;
+    const char *color = spot.is_occupied ? "\033[31m" : "\033[32m"; // rouge/vert
+    const char *sel = is_selected ? "\033[7m" : "";                 // sélection
 
-    // paramètres du bloc
-    int width = 1;  // largeur horizontale
-    int height = 3; // HAUTEUR verticale
-
-    int base_x = spot.screen_x;
-    int base_y = spot.screen_y - (height / 2); // donc y-1 quand height=3
-    if (base_y < 0)
-        base_y = 0;
-
-    for (int dy = 0; dy < height; dy++)
-    {
-        goto_xy(base_x, base_y + dy); // on descend de dy lignes
-
-        printf("%s", bg);
-        for (int dx = 0; dx < width; dx++)
-            printf(" ");
-        printf("%s", RESET);
-    }
+    // On remplace le P par un symbole plein
+    printf("%s%s█%s", sel, color, RESET);
 }
 
 void draw_all_spots(int selected_index)
