@@ -7,7 +7,7 @@
 #include <time.h>
 #include "../include/parking.h"
 
-// Fonction pour capturer une touche sans bloquer (du PDF)
+// Fonction utilitaire pour lire le clavier sans bloquer
 char key_pressed() {
     struct termios oldterm, newterm;
     int oldfd;
@@ -32,7 +32,7 @@ char key_pressed() {
 int afficher_menu() {
     int choix = 0;
     while (choix != 1 && choix != 2 && choix != 3) {
-        printf("\033[2J\033[H"); // Clear screen
+        printf("\033[2J\033[H");
         printf("\n====================================\n");
         printf("   PARKING SIMULATOR 2025 (ESIEA)   \n");
         printf("====================================\n\n");
@@ -41,68 +41,61 @@ int afficher_menu() {
         printf("3. Quitter\n\n");
         printf("Votre choix : ");
         if (scanf("%d", &choix) != 1) {
-            while(getchar() != '\n'); // Vider buffer si erreur
+            while(getchar() != '\n');
         }
     }
     return choix;
 }
 
 int main() {
-    srand(time(NULL)); // Init aléatoire
+    srand(time(NULL));
 
-    // 1. MENU
     int mode = afficher_menu();
     if (mode == 3) return 0;
 
-    // Configuration selon le mode
-    int chance_spawn = (mode == 1) ? 5 : 25; // % de chance par cycle
-    
-    // 2. INIT
+    int chance_spawn = (mode == 1) ? 5 : 20; // % de chance
+
     init_modeles();
     const char *map_path = "assets/parking_map.txt";
     
-    // Chargement graphique
+    // 1. Charger la map
     display_static_map(map_path);
-    init_spots_from_map(map_path); // Important pour connaître les places
+    init_spots_from_map(map_path);
 
     int timer = 0;
     char key = 0;
 
-    // 3. BOUCLE DE JEU
+    // --- BOUCLE DE JEU ---
     while (key != 'e') {
         
-        // A. SPAWN AUTOMATIQUE
+        // A. SPAWN
         timer++;
-        if (timer > 10) { // On tente un spawn tous les 10 cycles
+        if (timer > 10) {
             if ((rand() % 100) < chance_spawn) {
                 spawner_vehicule();
             }
             timer = 0;
         }
 
-        // B. INTELLIGENCE ARTIFICIELLE
+        // B. UPDATE (Mouvement + Effacement des traces)
         mettre_a_jour_vehicules();
 
-        // C. AFFICHAGE
-        // On redessine les places (pour effacer les vieilles traces)
-        draw_all_spots(-1); 
-        // On dessine les voitures par dessus
-        afficher_vehicules_dynamiques();
+        // C. DRAW
+        draw_all_spots(-1); // On redessine les places
+        afficher_vehicules_dynamiques(); // On dessine les voitures
 
         // D. INPUT
         key = key_pressed();
         
-        // Petit message de debug en bas
+        // Info debug
         goto_xy(0, 35);
-        printf("Mode: %s | 'e' pour Quitter", (mode==1?"Fluide":"Charge"));
+        printf("Mode: %s | 'e' pour Quitter | Vehicules actifs", (mode==1?"Fluide":"Charge"));
 
         fflush(stdout);
-        usleep(50000); // 50ms (environ 20 FPS)
+        usleep(50000); // 50ms pause
     }
 
-    // Nettoyage avant de partir (Bonne pratique C)
     liberer_memoire_vehicules();
-    
     goto_xy(0, 37);
     printf("Fin de la simulation.\n");
     return 0;
