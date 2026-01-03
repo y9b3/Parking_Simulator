@@ -7,7 +7,7 @@
 #include <time.h>
 #include "../include/parking.h"
 
-// Fonction utilitaire pour lire le clavier sans bloquer
+// Fonction "Non-bloquante" pour lire le clavier (Source PDF)
 char key_pressed() {
     struct termios oldterm, newterm;
     int oldfd;
@@ -29,74 +29,80 @@ char key_pressed() {
     return result;
 }
 
+// Menu de démarrage
 int afficher_menu() {
     int choix = 0;
     while (choix != 1 && choix != 2 && choix != 3) {
-        printf("\033[2J\033[H");
+        printf("\033[2J\033[H"); // Clear screen
         printf("\n====================================\n");
         printf("   PARKING SIMULATOR 2025 (ESIEA)   \n");
         printf("====================================\n\n");
         printf("1. Mode FLUIDE (Peu de voitures)\n");
-        printf("2. Mode CHARGE (Beaucoup de voitures)\n");
+        printf("2. Mode CHARGE (Embouteillages)\n");
         printf("3. Quitter\n\n");
         printf("Votre choix : ");
         if (scanf("%d", &choix) != 1) {
-            while(getchar() != '\n');
+            while(getchar() != '\n'); // Vider buffer si erreur de saisie
         }
     }
     return choix;
 }
 
 int main() {
-    srand(time(NULL));
+    srand(time(NULL)); // Initialisation de l'aléatoire
 
+    // 1. MENU
     int mode = afficher_menu();
     if (mode == 3) return 0;
 
-    int chance_spawn = (mode == 1) ? 5 : 20; // % de chance
+    // Config difficulté
+    int chance_spawn = (mode == 1) ? 5 : 25; // % de chance d'apparition
 
+    // 2. CHARGEMENT
     init_modeles();
     const char *map_path = "assets/parking_map.txt";
     
-    // 1. Charger la map
+    // Affiche le décor et charge les collisions en mémoire
     display_static_map(map_path);
     init_spots_from_map(map_path);
 
     int timer = 0;
     char key = 0;
 
-    // --- BOUCLE DE JEU ---
+    // 3. BOUCLE DE JEU
     while (key != 'e') {
         
-        // A. SPAWN
+        // A. SPAWN (Génération de voiture)
         timer++;
-        if (timer > 10) {
+        if (timer > 10) { // On teste toutes les 10 frames
             if ((rand() % 100) < chance_spawn) {
                 spawner_vehicule();
             }
             timer = 0;
         }
 
-        // B. UPDATE (Mouvement + Effacement des traces)
+        // B. PHYSIQUE (Mouvement et Collisions)
         mettre_a_jour_vehicules();
 
-        // C. DRAW
-        draw_all_spots(-1); // On redessine les places
-        afficher_vehicules_dynamiques(); // On dessine les voitures
+        // C. AFFICHAGE
+        draw_all_spots(-1); // Rafraîchit les places (vert/rouge)
+        afficher_vehicules_dynamiques(); // Dessine les voitures par dessus
 
         // D. INPUT
         key = key_pressed();
         
-        // Info debug
-        goto_xy(0, 35);
-        printf("Mode: %s | 'e' pour Quitter | Vehicules actifs", (mode==1?"Fluide":"Charge"));
+        // Debug info
+        goto_xy(0, 36);
+        printf("Mode: %s | [E] Quitter ", (mode==1?"Fluide":"Charge"));
 
         fflush(stdout);
-        usleep(50000); // 50ms pause
+        usleep(50000); // Vitesse du jeu (50ms = 20 FPS)
     }
 
+    // Nettoyage propre
     liberer_memoire_vehicules();
-    goto_xy(0, 37);
-    printf("Fin de la simulation.\n");
+    
+    goto_xy(0, 38);
+    printf("Simulation terminee.\n");
     return 0;
 }
