@@ -1,25 +1,23 @@
+#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <time.h>
-
 #include "../include/parking.h"
-#include "../include/vehicule.h"
-#include "../include/chargementvehicule.h"
 
-// Fonction pour lire une touche sans bloquer l'affichage
-char key_pressed() {
+// (Copie de la fonction key_pressed() du PDF)
+char key_pressed()
+{
     struct termios oldterm, newterm;
     int oldfd;
-    char c, result = 0;
+    int c; 
+    char result = 0;
 
     tcgetattr(STDIN_FILENO, &oldterm);
     newterm = oldterm;
     newterm.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newterm);
-
     oldfd = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, oldfd | O_NONBLOCK);
 
@@ -28,80 +26,114 @@ char key_pressed() {
     tcsetattr(STDIN_FILENO, TCSANOW, &oldterm);
     fcntl(STDIN_FILENO, F_SETFL, oldfd);
 
-    if (c != EOF) {
+    if (c != EOF)
+    {
         ungetc(c, stdin);
         result = getchar();
     }
+
     return result;
 }
 
-// Mode fluide : peu de véhicules
-void lancer_mode_fluide() {
-    printf("\n--- Mode Fluide ---\n");
+int main()
+{
+    // --- 1. IMPORTANT : On charge les dessins des véhicules ici ---
+    init_modeles(); 
 
     const char *map_path = "assets/parking_map.txt";
+
     display_static_map(map_path);
-    init_spots();
-    draw_all_spots(0);
+    init_spots_from_map(map_path);
 
-    VEHICULE *v1 = creer_vehicule('N', 5, 5, 60, 'g', 'v', "Voiture1", 1);
-    ajouter_vehicule(v1);
+    int selected_spot_index = 0;
+    draw_all_spots(selected_spot_index);
 
-    // Boucle de simulation simple
-    for (int step = 0; step < 10; step++) {
-        printf("\nÉtape %d\n", step+1);
-        deplacer_tous_vehicules();
-        afficher_vehicules();
-        usleep(500000);
-    }
-}
+    goto_xy(0, 14); 
+    printf("ZQSD: Deplacer | ESPACE: Changer vehicule | E: Quitter\n");
 
-// Mode chargé : beaucoup de véhicules
-void lancer_mode_charge() {
-    printf("\n--- Mode Chargé ---\n");
+    char key = 0;
+    while (key != 'e')
+    {
+        key = key_pressed();
 
-    const char *map_path = "assets/parking_map.txt";
-    display_static_map(map_path);
-    init_spots();
-    draw_all_spots(0);
+        if (key != 0)
+        {
+            int old_selection = selected_spot_index;
+            int selection_changed = 0;
 
-    for (int i = 0; i < 5; i++) {
-        VEHICULE *v = creer_vehicule('S', rand()%20, rand()%20,
-                                     40 + rand()%30, 'd', 'c', "Camion", i+2);
-        ajouter_vehicule(v);
-    }
+            switch (key)
+            {
+            case 'q': // gauche
+                if (selected_spot_index > 0)
+                {
+                    selected_spot_index--;
+                    selection_changed = 1;
+                }
+                break;
 
-     for (int step = 0; step < 10; step++) {
-    deplacer_tous_vehicules();
-    afficher_vehicules_sur_map(); // ← affichage visuel
-    usleep(500000);
-    }
+            case 'd': // droite
+                if (selected_spot_index < TOTAL_SPOTS - 1)
+                {
+                    selected_spot_index++;
+                    selection_changed = 1;
+                }
+                break;
 
-}
+            case 'z': // haut
+                if (selected_spot_index > 0)
+                {
+                    selected_spot_index--;
+                    selection_changed = 1;
+                }
+                break;
 
+            case 's': // bas
+                if (selected_spot_index < TOTAL_SPOTS - 1)
+                {
+                    selected_spot_index++;
+                    selection_changed = 1;
+                }
+                break;
 
-
-int main() {
-    srand(time(NULL));
-
-    printf("=== SIMULATEUR DE PARKING ===\n");
-    printf("Choisissez un mode :\n");
-    printf("1. Fluide\n");
-    printf("2. Chargé\n");
-    printf("e. Quitter\n");
-
-    char choix = 0;
-    while (choix != 'e') {
-        choix = key_pressed();
-        if (choix != 0) {
-            switch (choix) {
-                case '1': lancer_mode_fluide(); break;
-                case '2': lancer_mode_charge(); break;
-                case 'e': printf("\nFin de la simulation.\n"); break;
+            // --- 2. LOGIQUE ESPACE MODIFIÉE ---
+            case ' ':
+                // Si la place est vide, on met le premier véhicule (Type 0)
+                if (!all_spots[selected_spot_index].is_occupied) {
+                    all_spots[selected_spot_index].is_occupied = 1;
+                    all_spots[selected_spot_index].type_vehicule = 0;
+                }
+                // Si elle est occupée, on passe au véhicule suivant
+                else {
+                    all_spots[selected_spot_index].type_vehicule++;
+                    
+                    // Si on a dépassé le dernier type (2), on vide la place
+                    if (all_spots[selected_spot_index].type_vehicule > 2) {
+                        all_spots[selected_spot_index].is_occupied = 0;
+                        all_spots[selected_spot_index].type_vehicule = 0; // Reset
+                    }
+                }
+                // On redessine immédiatement la place avec le nouveau véhicule
+                draw_spot(all_spots[selected_spot_index], 1);
+                break;
             }
+
+            if (selection_changed)
+            {
+                draw_spot(all_spots[old_selection], 0);
+                draw_spot(all_spots[selected_spot_index], 1);
+            }
+
+            goto_xy(0, 15); 
+            // Affichage de debug utile
+            printf("Place: %d | Type: %d   ", selected_spot_index, all_spots[selected_spot_index].type_vehicule);
+            fflush(stdout);
         }
+
         usleep(50000);
     }
+
+    goto_xy(0, 16); 
+    printf("Simulation terminée.\n");
 
     return 0;
 }
