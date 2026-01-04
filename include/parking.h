@@ -1,12 +1,10 @@
 #ifndef PARKING_H
 #define PARKING_H
 
-#define TOTAL_SPOTS 42  // Nombre max de places
-#define HAUTEUR_MAX 60  // Augmenté un peu pour plus de sécurité
-#define LARGEUR_MAX 400 
-
+#define TOTAL_SPOTS 42  // Nombre max de places (ajuste selon ta map)
+#define HAUTEUR_MAX 50  // Hauteur max de la carte
+#define LARGEUR_MAX 400 // Largeur max de la carte
 extern int spawn_x, spawn_y;
-
 // --- STRUCTURES ---
 
 // Une place de parking (Zone verte)
@@ -31,8 +29,7 @@ typedef struct voiture
 {
     int id;
     int x, y;             // Position actuelle
-    int cible_x, cible_y; // Destination finale (@)
-    int etape_trajet;     // <--- AJOUTÉ : 0 = Rejoindre l'allée, 1 = Aller à la place
+    int cible_x, cible_y; // Destination
     int type;             // 0, 1, 2 (Design)
 
     EtatVehicule etat;
@@ -65,7 +62,7 @@ void goto_xy(int x, int y);
 
 // Moteur du jeu
 void spawner_vehicule(void);
-void mettre_a_jour_vehicules(void); // Gère Mouvement + Collisions
+void mettre_a_jour_vehicules(void); // Gère Mouvement + Collisions + Ghosting
 void afficher_vehicules_dynamiques(void);
 void liberer_memoire_vehicules(void);
 
