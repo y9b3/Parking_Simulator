@@ -8,8 +8,6 @@
 #include "../include/parking.h"
 
 // --- FONCTION UTILITAIRE (Non-bloquante) ---
-// Permet de lire une touche sans arrêter le programme
-// Source: PDF du projet
 char key_pressed()
 {
     struct termios oldterm, newterm;
@@ -39,21 +37,19 @@ int afficher_menu()
     int choix = 0;
     while (choix != 1 && choix != 2 && choix != 3)
     {
-        // Efface l'écran
         printf("\033[2J\033[H");
         printf("\n====================================\n");
         printf("   PARKING SIMULATOR 2025 (ESIEA)   \n");
         printf("====================================\n\n");
-        printf("1. Mode FLUIDE (Peu de voitures)\n");
+        printf("1. Mode TEST (1 voiture à la fois)\n");
         printf("2. Mode CHARGE (Risque d'embouteillages)\n");
         printf("3. Quitter\n\n");
         printf("Votre choix : ");
 
-        // Sécurité de saisie
         if (scanf("%d", &choix) != 1)
         {
             while (getchar() != '\n')
-                ; // Vider le buffer si l'utilisateur tape une lettre
+                ;
         }
     }
     return choix;
@@ -63,12 +59,10 @@ int afficher_menu()
 int main()
 {
     srand(time(NULL));
-
     int continuer_programme = 1;
 
     while (continuer_programme)
     {
-        // 1. AFFICHER LE MENU
         int mode = afficher_menu();
         if (mode == 3)
         {
@@ -78,55 +72,66 @@ int main()
 
         int chance_spawn = (mode == 1) ? 5 : 25;
 
-        // 2. INITIALISATION / RELOAD
         init_modeles();
         const char *map_path = "assets/parking_map.txt";
 
-        // On s'assure que la liste est vide si c'est un reload
         liberer_memoire_vehicules();
         liste_vehicules = NULL;
 
+        // --- AFFICHAGE STATIQUE (Une seule fois !) ---
         display_static_map(map_path);
         init_spots_from_map(map_path);
+        draw_all_spots(-1); // On dessine les places une seule fois au début
 
         int timer = 0;
         char key = 0;
 
-        // --- BOUCLE DE SIMULATION ---
         while (key != 'e' && key != 'r')
         {
             timer++;
             if (timer > 10)
             {
-                if ((rand() % 100) < chance_spawn)
+                if (mode == 1)
                 {
-                    spawner_vehicule();
+                    if (liste_vehicules == NULL)
+                    {
+                        spawner_vehicule();
+                    }
+                }
+                else
+                {
+                    if ((rand() % 100) < chance_spawn)
+                    {
+                        spawner_vehicule();
+                    }
                 }
                 timer = 0;
             }
 
+            // --- ORDRE DE DESSIN CRUCIAL ---
+            // 1. On met à jour (qui contient effacer_vehicule)
             mettre_a_jour_vehicules();
-            draw_all_spots(-1);
-            afficher_vehicules_dynamiques();
+
+            // 2. On n'appelle PLUS draw_all_spots(-1) ici !
+            // On ne redessine que si une place change de couleur (géré dans mettre_a_jour)
+
+            // 3. On affiche les voitures
+            // Note: Si mettre_a_jour appelle déjà afficher_vehicule, tu peux commenter cette ligne
+            // afficher_vehicules_dynamiques();
 
             key = key_pressed();
 
-            // --- AFFICHAGE DESCENDU (Ligne 42) ---
+            // --- TEXTE DE STATUT ---
             goto_xy(0, 48);
-            printf("\033[K"); // Efface la ligne pour éviter les restes de texte
-            printf("MODE: %s | 'r': Menu/Reload | 'e': Quitter", (mode == 1 ? "FLUIDE" : "CHARGE"));
+            printf("\033[K");
+            printf("MODE: %s | 'r': Menu/Reload | 'e': Quitter", (mode == 1 ? "TEST (Unique)" : "CHARGE"));
 
             fflush(stdout);
-            usleep(50000);
+            usleep(50000); // Pause de 50ms pour la fluidité
         }
 
-        // Si on sort car 'e', on arrête tout
         if (key == 'e')
-        {
             continuer_programme = 0;
-        }
-
-        // Nettoyage avant de retourner au menu ou de quitter
         liberer_memoire_vehicules();
     }
 

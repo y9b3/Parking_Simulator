@@ -5,6 +5,7 @@
 #define HAUTEUR_MAX 50  // Hauteur max de la carte
 #define LARGEUR_MAX 400 // Largeur max de la carte
 extern int spawn_x, spawn_y;
+extern int sortie_x, sortie_y;
 // --- STRUCTURES ---
 
 // Une place de parking (Zone verte)
@@ -34,7 +35,8 @@ typedef struct voiture
 
     EtatVehicule etat;
     int temps_gare; // Compteur (combien de temps elle reste)
-
+    unsigned long int tps;
+    char direction;
     struct voiture *suivant; // Pointeur vers la suivante
 } Vehicule;
 
@@ -43,7 +45,8 @@ typedef struct
 {
     int id;
     int largeur;
-    const char *forme[3];
+    char *forme[3]; // Pour les déplacements horizontaux (Est/Ouest)
+    char *forme_v[5];
 } ModeleVehicule;
 
 // --- VARIABLES GLOBALES ---
@@ -64,6 +67,7 @@ void goto_xy(int x, int y);
 void spawner_vehicule(void);
 void mettre_a_jour_vehicules(void); // Gère Mouvement + Collisions + Ghosting
 void afficher_vehicules_dynamiques(void);
+void afficher_vehicule(Vehicule *v);
 void liberer_memoire_vehicules(void);
 
 #endif
