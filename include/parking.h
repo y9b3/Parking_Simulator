@@ -2,8 +2,8 @@
 #define PARKING_H
 
 #define TOTAL_SPOTS 20   // Nombre max de places (ajuste selon ta map)
-#define HAUTEUR_MAX 40   // Hauteur max de la carte
-#define LARGEUR_MAX 120  // Largeur max de la carte
+#define HAUTEUR_MAX 50   // Hauteur max de la carte
+#define LARGEUR_MAX 400  // Largeur max de la carte
 
 // --- STRUCTURES ---
 
@@ -22,7 +22,7 @@ typedef enum {
     ETAT_SORTIE
 } EtatVehicule;
 
-// La voiture (Liste Chaînée)
+// La voiture (Liste Chaînée - OBLIGATOIRE)
 typedef struct voiture {
     int id;
     int x, y;             // Position actuelle

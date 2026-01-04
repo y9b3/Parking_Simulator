@@ -84,12 +84,33 @@ void init_spots_from_map(const char *filename) {
 
 // --- MOTEUR PHYSIQUE ---
 
-// Vérifie si une case est un mur
+// Vérifie si une case est un obstacle (Mur)
 int est_obstacle(int x, int y) {
+    // 1. Toujours vérifier les limites
     if (x < 0 || x >= LARGEUR_MAX || y < 0 || y >= HAUTEUR_MAX) return 1;
+    
     char c = map_logique[y][x];
-    // Ajoute ici tes caractères de mur: |, -, +, _
-    if (c == '|' || c == '-' || c == '+' || c == '_') return 1;
+    
+    // 2. LOGIQUE INVERSÉE : On liste UNIQUEMENT les murs connus.
+    // Si le caractère est un mur vertical, horizontal, un coin ou un underscore...
+    if (c == '|' || c == '-' || c == '_' || c == '+') {
+        return 1; // C'est un obstacle, on ne passe pas
+    }
+    
+    // Pour TOUT le reste (espace, flèches, points, lettres...), on considère que c'est de la route.
+    return 0; 
+}
+
+// Vérifie si une autre voiture bloque le passage
+int est_bloque_par_voiture(int x, int y, int mon_id) {
+    Vehicule *v = liste_vehicules;
+    while(v != NULL) {
+        if (v->id != mon_id) {
+            // hitbox simple
+            if (abs(v->x - x) < 10 && abs(v->y - y) < 2) return 1;
+        }
+        v = v->suivant;
+    }
     return 0;
 }
 
@@ -102,18 +123,25 @@ void effacer_vehicule(Vehicule *v) {
 
     for (int i=0; i<3; i++) {
         goto_xy(draw_x, draw_y + i);
-        for (int j=0; j < largeur; j++) printf(" ");
+        for (int j=0; j < largeur; j++) printf(" "); 
     }
 }
 
 void spawner_vehicule(void) {
+    // --- POSITION CALIBREE POUR TA MAP ---
+    // Ton curseur était à 188 (sur le mur). On décale à gauche pour centrer.
+    int start_x = 180; 
+    int start_y = 19;  // Bas de la map
+
+    // Si bouchon à l'entrée, on attend
+    if (est_bloque_par_voiture(start_x, start_y, -1)) return;
+
     Vehicule *nouveau = malloc(sizeof(Vehicule));
     if (!nouveau) return;
 
     nouveau->id = compteur_id_vehicule++;
-    // !!! AJUSTE ICI LES COORDONNÉES DE TON ENTRÉE !!!
-    nouveau->x = 90; 
-    nouveau->y = 25; 
+    nouveau->x = start_x; 
+    nouveau->y = start_y; 
     
     nouveau->type = rand() % 3;
     nouveau->etat = ETAT_CHERCHE_PLACE;
@@ -130,16 +158,15 @@ void spawner_vehicule(void) {
     if (place_trouvee != -1) {
         nouveau->cible_x = all_spots[place_trouvee].screen_x;
         nouveau->cible_y = all_spots[place_trouvee].screen_y;
-        all_spots[place_trouvee].is_occupied = 1; // Réservation
+        all_spots[place_trouvee].is_occupied = 1; 
         all_spots[place_trouvee].id_voiture = nouveau->id;
     } else {
         // Parking plein -> Sortie
         nouveau->etat = ETAT_SORTIE;
-        nouveau->cible_x = 90; 
+        nouveau->cible_x = 180; // Retour vers l'entrée/sortie
         nouveau->cible_y = 5;  
     }
 
-    // Ajout en tête de liste
     nouveau->suivant = liste_vehicules;
     liste_vehicules = nouveau;
 }
@@ -149,58 +176,53 @@ void mettre_a_jour_vehicules(void) {
     Vehicule *precedent = NULL;
 
     while (v != NULL) {
-        // 1. EFFACER
         effacer_vehicule(v);
 
-        // 2. MOUVEMENT AVEC COLLISIONS
         if (v->etat != ETAT_GARE) {
             int next_x = v->x;
-            
-            // Calcul X
+            int next_y = v->y;
+            int a_bouge = 0;
+
+            // X
             if (v->x < v->cible_x) next_x++;
             else if (v->x > v->cible_x) next_x--;
 
-            // Vérification Obstacle X
-            if (!est_obstacle(next_x, v->y)) {
-                v->x = next_x;
-            } else {
-                // Si bloqué en X, essayer de contourner en Y
-                if (v->y < v->cible_y) v->y++; // Descend
-                else if (v->y > v->cible_y) v->y--; // Monte
+            if (!est_obstacle(next_x, v->y) && !est_bloque_par_voiture(next_x, v->y, v->id)) {
+                v->x = next_x; a_bouge = 1;
+            } 
+            else {
+                // Contournement Y
+                if (v->y < v->cible_y) next_y++; else next_y--;
+                if (!est_obstacle(v->x, next_y) && !est_bloque_par_voiture(v->x, next_y, v->id)) {
+                    v->y = next_y; a_bouge = 1;
+                }
             }
 
-            // Calcul Y (si aligné ou bloqué)
-            // On bouge en Y seulement si on est pas bloqué
-            int next_y = v->y;
-            if (v->y < v->cible_y) next_y++;
-            else if (v->y > v->cible_y) next_y--;
-            
-            if (next_y != v->y && !est_obstacle(v->x, next_y)) {
-                // Petit hack: on bouge en Y seulement si on est proche en X 
-                // OU si on n'a pas pu bouger en X (contournement)
-                if (abs(v->x - v->cible_x) < 5 || v->x == next_x) {
+            // Y
+            if (!a_bouge || abs(v->x - v->cible_x) < 5) {
+                next_y = v->y;
+                if (v->y < v->cible_y) next_y++; else next_y--;
+                if (next_y != v->y && !est_obstacle(v->x, next_y) && !est_bloque_par_voiture(v->x, next_y, v->id)) {
                     v->y = next_y;
                 }
             }
         }
 
-        // 3. ARRIVÉE (Snap)
+        // Snap
         if (v->etat == ETAT_CHERCHE_PLACE && 
             abs(v->x - v->cible_x) <= 2 && abs(v->y - v->cible_y) <= 2) {
-            
             v->x = v->cible_x; v->y = v->cible_y;
             v->etat = ETAT_GARE;
             v->temps_gare = 50 + (rand() % 100);
         }
 
-        // 4. TEMPS GARÉ
+        // Départ
         else if (v->etat == ETAT_GARE) {
             v->temps_gare--;
             if (v->temps_gare <= 0) {
                 v->etat = ETAT_SORTIE;
-                v->cible_x = 90; // Sortie X
-                v->cible_y = 5;  // Sortie Y
-                // Libérer la place
+                v->cible_x = 180; // Retour sortie
+                v->cible_y = 5;  
                 for (int i=0; i<TOTAL_SPOTS; i++) {
                     if (all_spots[i].id_voiture == v->id) {
                         all_spots[i].is_occupied = 0;
@@ -210,7 +232,7 @@ void mettre_a_jour_vehicules(void) {
             }
         }
 
-        // 5. SORTIE (Destruction)
+        // Suppression
         if (v->etat == ETAT_SORTIE && abs(v->x - v->cible_x) <= 3 && abs(v->y - v->cible_y) <= 3) {
             Vehicule *tmp = v;
             if (precedent == NULL) { liste_vehicules = v->suivant; v = liste_vehicules; }
@@ -234,8 +256,7 @@ void afficher_vehicules_dynamiques(void) {
 
         for (int i=0; i<3; i++) {
             goto_xy(draw_x, draw_y + i);
-            if (v->etat == ETAT_GARE) printf(BLUE_TEXT);
-            else printf(RED_TEXT);
+            if (v->etat == ETAT_GARE) printf(BLUE_TEXT); else printf(RED_TEXT);
             printf("%s", modeles[v->type].forme[i]);
             printf(RESET);
         }
@@ -251,8 +272,7 @@ void draw_all_spots(int selected_index) {
             if (base_y < 0) base_y = 0;
             for (int dy = 0; dy < 3; dy++) {
                 goto_xy(all_spots[i].screen_x, base_y + dy);
-                printf("%s ", BG_GREEN);
-                printf("%s", RESET);
+                printf("%s ", BG_GREEN); printf("%s", RESET);
             }
         }
     }
