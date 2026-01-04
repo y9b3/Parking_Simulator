@@ -3,8 +3,8 @@
 
 // --- CONFIGURATION ---
 #define TOTAL_SPOTS 20   // Nombre max de places
-#define HAUTEUR_MAX 50   // Hauteur max de ta grille logique
-#define LARGEUR_MAX 400  // Largeur max de ta grille logique
+#define HAUTEUR_MAX 100   // Hauteur max de ta grille logique
+#define LARGEUR_MAX 500  // Largeur max de ta grille logique
 
 // --- STRUCTURES ---
 
