@@ -8,6 +8,8 @@
 #include "../include/parking.h"
 
 // --- FONCTION UTILITAIRE (Non-bloquante) ---
+// Permet de lire une touche sans arrêter le programme
+// Source: PDF du projet
 char key_pressed()
 {
     struct termios oldterm, newterm;
@@ -37,18 +39,21 @@ int afficher_menu()
     int choix = 0;
     while (choix != 1 && choix != 2 && choix != 3)
     {
+        // Efface l'écran
         printf("\033[2J\033[H");
         printf("\n====================================\n");
-        printf("   PARKING SIMULATOR 2026 (ESIEA)   \n");
+        printf("   PARKING SIMULATOR 2025 (ESIEA)   \n");
         printf("====================================\n\n");
         printf("1. Mode FLUIDE (Peu de voitures)\n");
         printf("2. Mode CHARGE (Risque d'embouteillages)\n");
         printf("3. Quitter\n\n");
         printf("Votre choix : ");
 
+        // Sécurité de saisie
         if (scanf("%d", &choix) != 1)
         {
-            while (getchar() != '\n'); 
+            while (getchar() != '\n')
+                ; // Vider le buffer si l'utilisateur tape une lettre
         }
     }
     return choix;
@@ -58,10 +63,12 @@ int afficher_menu()
 int main()
 {
     srand(time(NULL));
+
     int continuer_programme = 1;
 
     while (continuer_programme)
     {
+        // 1. AFFICHER LE MENU
         int mode = afficher_menu();
         if (mode == 3)
         {
@@ -69,14 +76,13 @@ int main()
             break;
         }
 
-        // Réglage de la difficulté selon le mode choisi
-        int chance_spawn = (mode == 1) ? 5 : 20;
+        int chance_spawn = (mode == 1) ? 5 : 25;
 
-        // INITIALISATION
+        // 2. INITIALISATION / RELOAD
         init_modeles();
         const char *map_path = "assets/parking_map.txt";
 
-        // Nettoyage de la mémoire si c'est un restart ('r')
+        // On s'assure que la liste est vide si c'est un reload
         liberer_memoire_vehicules();
         liste_vehicules = NULL;
 
@@ -90,8 +96,7 @@ int main()
         while (key != 'e' && key != 'r')
         {
             timer++;
-            // On spawn une voiture tous les X cycles si la place est libre
-            if (timer > 35) 
+            if (timer > 10)
             {
                 if ((rand() % 100) < chance_spawn)
                 {
@@ -106,20 +111,22 @@ int main()
 
             key = key_pressed();
 
-            // Affichage des infos en bas d'écran (Ligne 48)
+            // --- AFFICHAGE DESCENDU (Ligne 42) ---
             goto_xy(0, 48);
-            printf("\033[K"); 
+            printf("\033[K"); // Efface la ligne pour éviter les restes de texte
             printf("MODE: %s | 'r': Menu/Reload | 'e': Quitter", (mode == 1 ? "FLUIDE" : "CHARGE"));
 
             fflush(stdout);
-            usleep(50000); // 50ms par cycle pour une animation fluide
+            usleep(50000);
         }
 
+        // Si on sort car 'e', on arrête tout
         if (key == 'e')
         {
             continuer_programme = 0;
         }
 
+        // Nettoyage avant de retourner au menu ou de quitter
         liberer_memoire_vehicules();
     }
 
