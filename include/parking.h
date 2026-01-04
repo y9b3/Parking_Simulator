@@ -1,42 +1,46 @@
 #ifndef PARKING_H
 #define PARKING_H
 
-#define TOTAL_SPOTS 20   // Nombre max de places (ajuste selon ta map)
-#define HAUTEUR_MAX 50   // Hauteur max de la carte
-#define LARGEUR_MAX 400  // Largeur max de la carte
-
+#define TOTAL_SPOTS 42  // Nombre max de places (ajuste selon ta map)
+#define HAUTEUR_MAX 50  // Hauteur max de la carte
+#define LARGEUR_MAX 400 // Largeur max de la carte
+extern int spawn_x, spawn_y;
 // --- STRUCTURES ---
 
 // Une place de parking (Zone verte)
-typedef struct {
+typedef struct
+{
     int screen_x;
     int screen_y;
-    int is_occupied;     // 0 = libre, 1 = occupé
-    int id_voiture;      // ID de la voiture garée dessus (-1 si vide)
+    int is_occupied; // 0 = libre, 1 = occupé
+    int id_voiture;  // ID de la voiture garée dessus (-1 si vide)
 } ParkingSpot;
 
 // États de la voiture (Machine à états)
-typedef enum {
+typedef enum
+{
     ETAT_CHERCHE_PLACE,
     ETAT_GARE,
     ETAT_SORTIE
 } EtatVehicule;
 
 // La voiture (Liste Chaînée - OBLIGATOIRE)
-typedef struct voiture {
+typedef struct voiture
+{
     int id;
     int x, y;             // Position actuelle
     int cible_x, cible_y; // Destination
     int type;             // 0, 1, 2 (Design)
-    
+
     EtatVehicule etat;
-    int temps_gare;       // Compteur (combien de temps elle reste)
-    
+    int temps_gare; // Compteur (combien de temps elle reste)
+
     struct voiture *suivant; // Pointeur vers la suivante
 } Vehicule;
 
 // Modèle graphique (Dessin ASCII)
-typedef struct {
+typedef struct
+{
     int id;
     int largeur;
     const char *forme[3];
