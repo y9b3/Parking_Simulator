@@ -7,7 +7,6 @@
 #include <time.h>
 #include "../include/parking.h"
 
-// --- FONCTION UTILITAIRE (Non-bloquante) ---
 char key_pressed()
 {
     struct termios oldterm, newterm;
@@ -31,7 +30,6 @@ char key_pressed()
     return result;
 }
 
-// --- MENU DE DÉMARRAGE ---
 int afficher_menu()
 {
     int choix = 0;
@@ -39,13 +37,12 @@ int afficher_menu()
     {
         printf("\033[2J\033[H");
         printf("\n====================================\n");
-        printf("   PARKING SIMULATOR 2025 (ESIEA)   \n");
+        printf("   PARKING SIMULATOR 2026 (PILOTE)  \n");
         printf("====================================\n\n");
-        printf("1. Mode TEST (1 voiture à la fois)\n");
-        printf("2. Mode CHARGE (Risque d'embouteillages)\n");
+        printf("1. Mode SOLO (Conduite Libre)\n");
+        printf("2. Mode MULTI (Futur)\n");
         printf("3. Quitter\n\n");
         printf("Votre choix : ");
-
         if (scanf("%d", &choix) != 1)
         {
             while (getchar() != '\n')
@@ -55,7 +52,6 @@ int afficher_menu()
     return choix;
 }
 
-// --- MAIN (Boucle du Jeu) ---
 int main()
 {
     srand(time(NULL));
@@ -65,77 +61,106 @@ int main()
     {
         int mode = afficher_menu();
         if (mode == 3)
-        {
-            continuer_programme = 0;
             break;
-        }
-
-        int chance_spawn = (mode == 1) ? 5 : 25;
 
         init_modeles();
-        const char *map_path = "assets/parking_map.txt";
-
         liberer_memoire_vehicules();
-        liste_vehicules = NULL;
+        voiture_joueur = NULL; // On s'assure que c'est bien vide
 
-        // --- AFFICHAGE STATIQUE (Une seule fois !) ---
-        display_static_map(map_path);
-        init_spots_from_map(map_path);
-        draw_all_spots(-1); // On dessine les places une seule fois au début
+        // Initialisation de la map et des places
+        display_static_map("assets/parking_map.txt");
+        init_spots_from_map("assets/parking_map.txt");
+        draw_all_spots(-1);
 
-        int timer = 0;
         char key = 0;
-
         while (key != 'e' && key != 'r')
         {
-            timer++;
-            if (timer > 10)
+            key = key_pressed();
+
+            // --- GESTION DE LA TOUCHE ESPACE (Spawn et Parking) ---
+            if (key == ' ')
             {
-                if (mode == 1)
+                if (voiture_joueur == NULL)
                 {
-                    if (liste_vehicules == NULL)
-                    {
-                        spawner_vehicule();
-                    }
+                    spawner_vehicule();
                 }
                 else
                 {
-                    if ((rand() % 100) < chance_spawn)
+                    int id_p = verifier_place_proche(voiture_joueur);
+                    if (id_p != -1)
                     {
-                        spawner_vehicule();
+                        if (voiture_joueur->etat != ETAT_GARE)
+                        {
+                            all_spots[id_p].is_occupied = 1;
+                            all_spots[id_p].id_voiture = voiture_joueur->id;
+                            voiture_joueur->etat = ETAT_GARE; // Verrouille la voiture
+                        }
+                        else
+                        {
+                            all_spots[id_p].is_occupied = 0;
+                            all_spots[id_p].id_voiture = -1;
+                            voiture_joueur->etat = ETAT_CHERCHE_PLACE; // Libère la voiture
+                        }
+                        draw_all_spots(-1);
                     }
                 }
-                timer = 0;
             }
 
-            // --- ORDRE DE DESSIN CRUCIAL ---
-            // 1. On met à jour (qui contient effacer_vehicule)
+            // --- GESTION DES DÉPLACEMENTS (Sécurisée) ---
+            if (voiture_joueur != NULL && voiture_joueur->etat != ETAT_GARE)
+            {
+                if (key == 'z')
+                    deplacer_joueur(0, -1, 'N');
+                if (key == 's')
+                    deplacer_joueur(0, 1, 'S');
+                if (key == 'q')
+                    deplacer_joueur(-2, 0, 'O');
+                if (key == 'd')
+                    deplacer_joueur(2, 0, 'E');
+            }
+
             mettre_a_jour_vehicules();
 
-            // 2. On n'appelle PLUS draw_all_spots(-1) ici !
-            // On ne redessine que si une place change de couleur (géré dans mettre_a_jour)
+            // --- DEBUG SÉCURISÉ : ÉVITE LE SEGMENTATION FAULT ---
+            goto_xy(0, 53);
+            if (voiture_joueur != NULL)
+            {
+                int id_p = -1;
+                // On cherche la place la plus proche techniquement
+                for (int i = 0; i < TOTAL_SPOTS; i++)
+                {
+                    if (abs(voiture_joueur->x - all_spots[i].screen_x) < 10)
+                    {
+                        id_p = i;
+                        break;
+                    }
+                }
 
-            // 3. On affiche les voitures
-            // Note: Si mettre_a_jour appelle déjà afficher_vehicule, tu peux commenter cette ligne
-            // afficher_vehicules_dynamiques();
+                if (id_p != -1)
+                {
+                    printf("\033[K[DEBUG] VOITURE(%d,%d) | PROCHE PLACE %d(%d,%d)",
+                           voiture_joueur->x, voiture_joueur->y, id_p,
+                           all_spots[id_p].screen_x, all_spots[id_p].screen_y);
+                }
+                else
+                {
+                    printf("\033[K[DEBUG] VOITURE(%d,%d) | AUCUNE PLACE À PROXIMITÉ",
+                           voiture_joueur->x, voiture_joueur->y);
+                }
+            }
 
-            key = key_pressed();
-
-            // --- TEXTE DE STATUT ---
-            goto_xy(0, 48);
-            printf("\033[K");
-            printf("MODE: %s | 'r': Menu/Reload | 'e': Quitter", (mode == 1 ? "TEST (Unique)" : "CHARGE"));
-
+            // HUD Status en bas de l'écran
+            goto_xy(0, 55);
+            printf("\033[K MODE: %d | 'r': Menu/Reload | 'e': Quitter | ESPACE: Spawn/Park", mode);
             fflush(stdout);
-            usleep(50000); // Pause de 50ms pour la fluidité
+
+            usleep(25000);
         }
 
         if (key == 'e')
             continuer_programme = 0;
+
         liberer_memoire_vehicules();
     }
-
-    printf("\033[2J\033[H");
-    printf("Simulation terminee. Au revoir !\n");
     return 0;
 }
