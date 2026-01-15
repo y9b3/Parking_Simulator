@@ -1,23 +1,23 @@
-# Utiliser une image Ubuntu 22.04 comme base
+# Utilisation d'Ubuntu 22.04 comme base pour l'environnement Linux
 FROM ubuntu:22.04
 
-# Éviter les questions interactives pendant l'installation
+# Empeche les interruptions interactives durant l'installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Mettre à jour les paquets et installer les dépendances du projet
+# Mise a jour et installation des outils de compilation et bibliotheques
 RUN apt-get update && apt-get install -y \
     build-essential \
     gdb \
     valgrind \
-    libncurses-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
     sox \
     libsox-dev \
     ttf-ancient-fonts \
-    && apt-get clean # Nettoyer le cache
+    && apt-get clean
 
-# Créer un répertoire de travail
+# Repertoire de travail dans le conteneur
 WORKDIR /app
 
-# Commande pour garder le conteneur en vie
-# (Il attendra que tu t'y connectes)
+# Maintien du conteneur en execution1
 CMD ["tail", "-f", "/dev/null"]
