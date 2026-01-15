@@ -1,17 +1,24 @@
+#define _XOPEN_SOURCE_EXTENDED 1
+#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <ncurses.h> // INDISPENSABLE
+#include <locale.h>  // Pour l'Unicode
 #include "../include/parking.h"
+
+#define OFFSET_MAP 7 // Le décalage dû à l'en-tête du fichier texte
 
 // --- VARIABLES GLOBALES ---
 ParkingSpot all_spots[TOTAL_SPOTS];
 Vehicule *liste_vehicules = NULL;
-Vehicule *voiture_joueur = NULL; // Pointeur vers le véhicule piloté
+Vehicule *voiture_joueur = NULL;
 ModeleVehicule modeles[3];
 char map_logique[HAUTEUR_MAX][LARGEUR_MAX];
 int spawn_x, spawn_y;
-int compteur_id_vehicule = 0;
+
+cchar_t map_snapshot[HAUTEUR_MAX][LARGEUR_MAX];
 
 void init_modeles(void)
 {
@@ -58,7 +65,7 @@ void spawner_vehicule(void)
     if (!voiture_joueur)
         return;
 
-    // On utilise les coordonnées exactes stockées
+    // La voiture utilise les coordonnées LOGIQUES (relatives à la map sans header)
     voiture_joueur->x = spawn_x;
     voiture_joueur->y = spawn_y;
 
@@ -88,14 +95,12 @@ void deplacer_joueur(int dx, int dy, char dir)
     }
     else
     {
-        // COLLISION : On active le clignotement pour 10 frames
         voiture_joueur->clignotement = 10;
     }
 }
 
 int est_obstacle(int x, int y)
 {
-    // On vérifie un carré de 5x3 autour du futur centre
     for (int dy = -1; dy <= 1; dy++)
     {
         for (int dx = -2; dx <= 2; dx++)
@@ -106,17 +111,42 @@ int est_obstacle(int x, int y)
                 return 1;
 
             unsigned char c = (unsigned char)map_logique[cy][cx];
-            // Si on touche un mur (Unicode > 127 ou bordure ASCII)
+            // Murs standards et Unicode étendu
             if (c > 127 || c == '|' || c == '-' || c == '+')
                 return 1;
         }
     }
     return 0;
 }
+void sauvegarder_background(void)
+{
+    cchar_t cell;
+    int res;
 
+    // On parcourt toute la taille théorique de la map
+    for (int y = 0; y < HAUTEUR_MAX; y++)
+    {
+        for (int x = 0; x < LARGEUR_MAX; x++)
+        {
+
+            // On essaie de lire
+            res = mvin_wch(y, x, &cell);
+
+            if (res != ERR)
+            {
+                map_snapshot[y][x] = cell;
+            }
+            else
+            {
+                // Si Ncurses refuse de lire (hors zone), on force un caractère de debug
+                // Si tu vois des points rouges, c'est que la zone est hors limite
+                setcchar(&map_snapshot[y][x], L".", 0, 0, NULL);
+            }
+        }
+    }
+}
 void effacer_vehicule(Vehicule *v)
 {
-    // Taille exacte de la voiture pour ne pas déborder sur les murs à côté
     int l = (v->direction == 'N' || v->direction == 'S') ? 5 : 9;
     int h = (v->direction == 'N' || v->direction == 'S') ? 5 : 3;
 
@@ -126,11 +156,12 @@ void effacer_vehicule(Vehicule *v)
         {
             int cx = v->x - (l / 2) + j;
             int cy = v->y - (h / 2) + i;
-            if (cx >= 0 && cy >= 0 && cy < HAUTEUR_MAX && cx < LARGEUR_MAX)
+            int screen_y = cy + OFFSET_MAP;
+
+            // On vérifie juste qu'on est dans le tableau
+            if (cx >= 0 && screen_y >= 0 && screen_y < HAUTEUR_MAX && cx < LARGEUR_MAX)
             {
-                goto_xy(cx, cy);
-                // On restaure le décor de fond
-                putchar(map_logique[cy][cx]);
+                mvadd_wch(screen_y, cx, &map_snapshot[screen_y][cx]);
             }
         }
     }
@@ -140,58 +171,57 @@ void mettre_a_jour_vehicules(void)
 {
     if (voiture_joueur == NULL)
         return;
-    if (voiture_joueur->clignotement > 0)
-    {
-        voiture_joueur->clignotement--;
-    }
 
-    // Calcul du tarif en temps réel (0.10€ / seconde)
+    if (voiture_joueur->clignotement > 0)
+        voiture_joueur->clignotement--;
+
     unsigned long duree = (unsigned long)time(NULL) - voiture_joueur->tps;
     float tarif = duree * 0.10;
 
-    // HUD en haut de l'écran
-    goto_xy(2, 0);
-    printf("\033[1;32m[PILOTAGE] | TEMPS: %lus | TARIF: %.2f EUR \033[0m", duree, tarif);
+    // HUD - Utilisation de ncurses mvprintw
+    attron(COLOR_PAIR(2)); // Vert
+    mvprintw(0, 2, "[PILOTAGE] | TEMPS: %lus | TARIF: %.2f EUR", duree, tarif);
+    attroff(COLOR_PAIR(2));
 
-    // Affichage dans le cadre map dédié
-    goto_xy(20, 8);
-    printf("%.2f € ", tarif);
+    // Affichage dans le cadre map
+    mvprintw(8, 20, "%.2f E", tarif); // Attention au symbole Euro parfois capricieux
 
     afficher_vehicule(voiture_joueur);
+    refresh(); // Rafraîchissement global
 }
 
 void afficher_vehicule(Vehicule *v)
 {
-    // Si la voiture clignote, on ne l'affiche qu'une frame sur deux
     if (v->clignotement > 0 && v->clignotement % 2 == 0)
-    {
-        return; // Saute l'affichage pour cette frame
-    }
+        return;
 
+    // Gestion des couleurs ncurses
     if (v->etat == ETAT_GARE)
-        printf("\033[1;34m"); // Bleu
+        attron(COLOR_PAIR(1)); // Cyan/Bleu si garé
     else if (v->clignotement > 0)
-        printf("\033[1;37m"); // Blanc pendant le choc
+        attron(A_BOLD); // Blanc brillant si choc
     else
-        printf("\033[1;31m"); // Rouge normal
+        attron(COLOR_PAIR(3)); // Rouge normal
 
+    // On dessine avec l'OFFSET_MAP pour s'aligner sur la map
     if (v->direction == 'E' || v->direction == 'O')
     {
         for (int i = 0; i < 3; i++)
-        {
-            goto_xy(v->x - 4, v->y - 1 + i);
-            printf("%s", modeles[v->type].forme[i]);
-        }
+            mvprintw((v->y - 1 + i) + OFFSET_MAP, v->x - 4, "%s", modeles[v->type].forme[i]);
     }
     else
     {
         for (int i = 0; i < 5; i++)
-        {
-            goto_xy(v->x - 2, v->y - 2 + i);
-            printf("%s", modeles[v->type].forme_v[i]);
-        }
+            mvprintw((v->y - 2 + i) + OFFSET_MAP, v->x - 2, "%s", modeles[v->type].forme_v[i]);
     }
-    printf("\033[0m");
+
+    // Reset des couleurs
+    if (v->etat == ETAT_GARE)
+        attroff(COLOR_PAIR(1));
+    else if (v->clignotement > 0)
+        attroff(A_BOLD);
+    else
+        attroff(COLOR_PAIR(3));
 }
 
 void draw_all_spots(int idx)
@@ -199,56 +229,87 @@ void draw_all_spots(int idx)
     (void)idx;
     for (int i = 0; i < TOTAL_SPOTS; i++)
     {
-        // On dessine la place sur 3 lignes de haut pour qu'elle soit bien visible
         for (int dy = -1; dy <= 1; dy++)
         {
-            goto_xy(all_spots[i].screen_x, all_spots[i].screen_y + dy);
+            // Position absolue à l'écran (calculée dans init_spots)
+            int y = all_spots[i].screen_y + dy;
+            int x = all_spots[i].screen_x;
+
+            move(y, x); // Déplace le curseur ncurses
 
             if (all_spots[i].is_occupied)
             {
-                // ROUGE : Fond rouge (\033[41m)
-                printf("\033[41m \033[0m");
+                // Simulation fond Rouge avec texte inversé
+                attron(COLOR_PAIR(3) | A_REVERSE);
+                addstr(" ");
+                attroff(COLOR_PAIR(3) | A_REVERSE);
             }
             else
             {
-                // VERT : Fond vert (\033[42m)
-                printf("\033[42m \033[0m");
+                // Simulation fond Vert avec texte inversé
+                attron(COLOR_PAIR(2) | A_REVERSE);
+                addstr(" ");
+                attroff(COLOR_PAIR(2) | A_REVERSE);
             }
         }
     }
-    fflush(stdout);
+    refresh();
 }
+
 int verifier_place_proche(Vehicule *v)
 {
     if (v == NULL)
         return -1;
+
+    int meilleur_spot = -1;
+    double distance_min = 100000.0;
+
+    // IMPORTANT : On ajoute 7 car les places sont enregistrées avec le décalage du titre
+    int offset_map = 7;
+
     for (int i = 0; i < TOTAL_SPOTS; i++)
     {
-        // Distance entre le centre de la voiture et le centre enregistré de la place
-        int dx = abs(v->x - all_spots[i].screen_x);
-        int dy = abs(v->y - all_spots[i].screen_y);
+        // Axe X : Pas de décalage, on compare direct
+        int dx = v->x - all_spots[i].screen_x;
 
-        // On accepte une large zone (un carré de 8x6)
-        if (dx <= 5 && dy <= 3)
+        // Axe Y : ON AJOUTE LE DÉCALAGE à la voiture pour qu'elle "parle la même langue" que la place
+        int dy = (v->y + offset_map) - all_spots[i].screen_y;
+
+        // Zone de tolérance
+        if (abs(dx) <= 10 && abs(dy) <= 6)
         {
-            return i;
+            // Formule de distance précise
+            double distance_reelle = sqrt((dx * dx) + (dy * 2.0 * dy * 2.0));
+
+            if (distance_reelle < distance_min)
+            {
+                distance_min = distance_reelle;
+                meilleur_spot = i;
+            }
         }
     }
-    return -1;
+    return meilleur_spot;
 }
-
-void goto_xy(int x, int y) { printf("\033[%d;%dH", y + 1, x + 1); }
+// Plus besoin de goto_xy, ncurses a "move" ou "mvprintw"
+void goto_xy(int x, int y) { move(y, x); }
 
 void display_static_map(const char *f)
 {
     FILE *file = fopen(f, "r");
     if (!file)
         return;
-    printf("\033[2J\033[H");
-    int c;
-    while ((c = fgetc(file)) != EOF)
-        putchar(c);
+
+    char line[1024];
+    int row = 0;
+
+    // On imprime le fichier ligne par ligne
+    while (fgets(line, sizeof(line), file))
+    {
+        mvprintw(row, 0, "%s", line);
+        row++;
+    }
     fclose(file);
+    refresh();
 }
 
 void init_spots_from_map(const char *filename)
@@ -258,7 +319,7 @@ void init_spots_from_map(const char *filename)
         return;
 
     char line[1024];
-    int y = 0;
+    int y = 0; // Ligne absolue du fichier
     int spot_idx = 0;
 
     while (fgets(line, sizeof(line), file) && y < HAUTEUR_MAX)
@@ -269,8 +330,8 @@ void init_spots_from_map(const char *filename)
             unsigned char c = (unsigned char)line[i];
             int char_len = (c >= 0xe0) ? 3 : 1;
 
-            // --- ON REVIENT AU DÉCALAGE DE RÉFÉRENCE ---
-            int real_y = y - 7;
+            // Coordonnée logique pour la map (on ignore le header de 7 lignes)
+            int real_y = y - OFFSET_MAP;
 
             if (real_y >= 0)
             {
@@ -279,29 +340,26 @@ void init_spots_from_map(const char *filename)
                 if (line[i] == 'D')
                 {
                     spawn_x = vx;
-                    spawn_y = real_y;
-                    // Tunnel pour sortir du box D
+                    spawn_y = real_y; // Spawn stocké en coordonnées logiques
+
+                    // Tunnel de sortie
                     for (int dy = -2; dy <= 2; dy++)
-                    {
                         for (int dx = -10; dx <= 0; dx++)
-                        {
                             if (real_y + dy >= 0 && vx + dx >= 0)
                                 map_logique[real_y + dy][vx + dx] = ' ';
-                        }
-                    }
                 }
 
                 if (line[i] == '@' && spot_idx < TOTAL_SPOTS)
                 {
-                    // On enregistre la position précise pour all_spots
                     all_spots[spot_idx].screen_x = vx;
-                    all_spots[spot_idx].screen_y = real_y;
+                    // CORRECTION MAJEURE : On stocke la coordonnée ÉCRAN (y) et non logique
+                    all_spots[spot_idx].screen_y = y;
+
                     all_spots[spot_idx].is_occupied = 0;
                     all_spots[spot_idx].id_voiture = -1;
                     spot_idx++;
 
-                    // CRUCIAL : On remplace le '@' par un vide pour ne pas l'afficher en texte
-                    map_logique[real_y][vx] = ' ';
+                    map_logique[real_y][vx] = ' '; // On efface le @ de la logique
                 }
             }
             i += char_len;
@@ -311,6 +369,7 @@ void init_spots_from_map(const char *filename)
     }
     fclose(file);
 }
+
 void liberer_memoire_vehicules()
 {
     Vehicule *v = liste_vehicules;

@@ -24,13 +24,21 @@ typedef enum
 
 typedef struct voiture
 {
+    // --- CHAMPS EXISTANTS (Ne change rien ici pour le Mode 1) ---
     int id;
     int x, y;
     int type;
-    EtatVehicule etat;
+    EtatVehicule etat; // Garde ton enum, c'est très bien
     unsigned long int tps;
     char direction;
-    int clignotement; // <--- AJOUTE CECI : 0 = normal, >0 = clignote
+    int clignotement;
+
+    // --- NOUVEAUX CHAMPS (Pour le Mode 2 Automatique) ---
+    int id_place_visee; // L'ID de la place où la voiture veut aller
+    long heure_arrivee; // L'heure exacte (time_t) pour le prix
+    int a_paye;         // 0 ou 1, pour savoir si elle a payé
+
+    // --- POINTEUR (Toujours à la fin par habitude) ---
     struct voiture *suivant;
 } Vehicule;
 
@@ -61,6 +69,9 @@ void effacer_vehicule(Vehicule *v);
 void liberer_memoire_vehicules(void);
 int est_obstacle(int x, int y);
 void deplacer_joueur(int dx, int dy, char dir);
+void sauvegarder_background(void);
 int verifier_place_proche(Vehicule *v);
+void jouer_mode_solo(void);
+void jouer_mode_multi(void);
 
 #endif

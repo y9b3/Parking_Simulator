@@ -1,166 +1,107 @@
 #define _XOPEN_SOURCE 700
-#include <stdio.h>
+#include <ncurses.h>
+#include <locale.h>
 #include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <time.h>
 #include "../include/parking.h"
 
-char key_pressed()
+// --- MENU ---
+int afficher_menu_ncurses()
 {
-    struct termios oldterm, newterm;
-    int oldfd;
-    int c;
-    char result = 0;
-    tcgetattr(STDIN_FILENO, &oldterm);
-    newterm = oldterm;
-    newterm.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newterm);
-    oldfd = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldfd | O_NONBLOCK);
-    c = getchar();
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldterm);
-    fcntl(STDIN_FILENO, F_SETFL, oldfd);
-    if (c != EOF)
-    {
-        ungetc(c, stdin);
-        result = getchar();
-    }
-    return result;
-}
+    char *choix_txt[] = {
+        "1. Mode SOLO (Conduite Libre)",
+        "2. Mode MULTI (Reseau)",
+        "3. Quitter"};
+    int n_choix = 3;
+    int selection = 0;
+    int ch;
 
-int afficher_menu()
-{
-    int choix = 0;
-    while (choix != 1 && choix != 2 && choix != 3)
+    nodelay(stdscr, FALSE);
+    keypad(stdscr, TRUE);
+
+    while (1)
     {
-        printf("\033[2J\033[H");
-        printf("\n====================================\n");
-        printf("   PARKING SIMULATOR 2026 (PILOTE)  \n");
-        printf("====================================\n\n");
-        printf("1. Mode SOLO (Conduite Libre)\n");
-        printf("2. Mode MULTI (Futur)\n");
-        printf("3. Quitter\n\n");
-        printf("Votre choix : ");
-        if (scanf("%d", &choix) != 1)
+        clear();
+        attron(A_BOLD | COLOR_PAIR(1));
+        mvprintw(2, 4, "====================================");
+        mvprintw(3, 4, "   PARKING SIMULATOR 2026 (NCURSES) ");
+        mvprintw(4, 4, "====================================");
+        attroff(A_BOLD | COLOR_PAIR(1));
+
+        for (int i = 0; i < n_choix; i++)
         {
-            while (getchar() != '\n')
-                ;
+            if (i == selection)
+            {
+                attron(A_REVERSE);
+                mvprintw(7 + i * 2, 6, "-> %s", choix_txt[i]);
+                attroff(A_REVERSE);
+            }
+            else
+            {
+                mvprintw(7 + i * 2, 9, "%s", choix_txt[i]);
+            }
+        }
+        mvprintw(15, 4, "Utilisez HAUT/BAS et ENTREE");
+
+        ch = getch();
+        switch (ch)
+        {
+        case KEY_UP:
+            selection--;
+            if (selection < 0)
+                selection = n_choix - 1;
+            break;
+        case KEY_DOWN:
+            selection++;
+            if (selection >= n_choix)
+                selection = 0;
+            break;
+        case 10:
+            return selection + 1;
         }
     }
-    return choix;
 }
 
+// --- MAIN ---
 int main()
 {
+    setlocale(LC_ALL, "");
+    initscr();
+    resize_term(HAUTEUR_MAX, LARGEUR_MAX);
+    cbreak();
+    noecho();
+    curs_set(0);
+    keypad(stdscr, TRUE);
+
+    if (has_colors())
+    {
+        start_color();
+        init_pair(1, COLOR_CYAN, COLOR_BLACK);
+        init_pair(2, COLOR_GREEN, COLOR_BLACK);
+        init_pair(3, COLOR_RED, COLOR_BLACK);
+    }
+
     srand(time(NULL));
     int continuer_programme = 1;
 
     while (continuer_programme)
     {
-        int mode = afficher_menu();
-        if (mode == 3)
-            break;
-
-        init_modeles();
-        liberer_memoire_vehicules();
-        voiture_joueur = NULL; // On s'assure que c'est bien vide
-
-        // Initialisation de la map et des places
-        display_static_map("assets/parking_map.txt");
-        init_spots_from_map("assets/parking_map.txt");
-        draw_all_spots(-1);
-
-        char key = 0;
-        while (key != 'e' && key != 'r')
+        int mode = afficher_menu_ncurses();
+        switch (mode)
         {
-            key = key_pressed();
-
-            // --- GESTION DE LA TOUCHE ESPACE (Spawn et Parking) ---
-            if (key == ' ')
-            {
-                if (voiture_joueur == NULL)
-                {
-                    spawner_vehicule();
-                }
-                else
-                {
-                    int id_p = verifier_place_proche(voiture_joueur);
-                    if (id_p != -1)
-                    {
-                        if (voiture_joueur->etat != ETAT_GARE)
-                        {
-                            all_spots[id_p].is_occupied = 1;
-                            all_spots[id_p].id_voiture = voiture_joueur->id;
-                            voiture_joueur->etat = ETAT_GARE; // Verrouille la voiture
-                        }
-                        else
-                        {
-                            all_spots[id_p].is_occupied = 0;
-                            all_spots[id_p].id_voiture = -1;
-                            voiture_joueur->etat = ETAT_CHERCHE_PLACE; // Libère la voiture
-                        }
-                        draw_all_spots(-1);
-                    }
-                }
-            }
-
-            // --- GESTION DES DÉPLACEMENTS (Sécurisée) ---
-            if (voiture_joueur != NULL && voiture_joueur->etat != ETAT_GARE)
-            {
-                if (key == 'z')
-                    deplacer_joueur(0, -1, 'N');
-                if (key == 's')
-                    deplacer_joueur(0, 1, 'S');
-                if (key == 'q')
-                    deplacer_joueur(-2, 0, 'O');
-                if (key == 'd')
-                    deplacer_joueur(2, 0, 'E');
-            }
-
-            mettre_a_jour_vehicules();
-
-            // --- DEBUG SÉCURISÉ : ÉVITE LE SEGMENTATION FAULT ---
-            goto_xy(0, 53);
-            if (voiture_joueur != NULL)
-            {
-                int id_p = -1;
-                // On cherche la place la plus proche techniquement
-                for (int i = 0; i < TOTAL_SPOTS; i++)
-                {
-                    if (abs(voiture_joueur->x - all_spots[i].screen_x) < 10)
-                    {
-                        id_p = i;
-                        break;
-                    }
-                }
-
-                if (id_p != -1)
-                {
-                    printf("\033[K[DEBUG] VOITURE(%d,%d) | PROCHE PLACE %d(%d,%d)",
-                           voiture_joueur->x, voiture_joueur->y, id_p,
-                           all_spots[id_p].screen_x, all_spots[id_p].screen_y);
-                }
-                else
-                {
-                    printf("\033[K[DEBUG] VOITURE(%d,%d) | AUCUNE PLACE À PROXIMITÉ",
-                           voiture_joueur->x, voiture_joueur->y);
-                }
-            }
-
-            // HUD Status en bas de l'écran
-            goto_xy(0, 55);
-            printf("\033[K MODE: %d | 'r': Menu/Reload | 'e': Quitter | ESPACE: Spawn/Park", mode);
-            fflush(stdout);
-
-            usleep(25000);
-        }
-
-        if (key == 'e')
+        case 1:
+            jouer_mode_solo(); // Appelle la fonction externe
+            break;
+        case 2:
+            jouer_mode_multi(); // Appelle la fonction externe
+            break;
+        case 3:
             continuer_programme = 0;
-
-        liberer_memoire_vehicules();
+            break;
+        }
     }
+
+    endwin();
+    printf("Fin du programme.\n");
     return 0;
 }
