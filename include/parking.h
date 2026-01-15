@@ -1,12 +1,13 @@
 #ifndef PARKING_H
 #define PARKING_H
 
-#define TOTAL_SPOTS 42
-#define HAUTEUR_MAX 100 // Augmenté pour le HUD du bas
-#define LARGEUR_MAX 400
-
 #include <time.h>
 
+#define TOTAL_SPOTS 42
+#define HAUTEUR_MAX 100
+#define LARGEUR_MAX 400
+
+/* Definition des emplacements de parking */
 typedef struct
 {
     int screen_x;
@@ -15,6 +16,7 @@ typedef struct
     int id_voiture;
 } ParkingSpot;
 
+/* États possibles d'un vehicule */
 typedef enum
 {
     ETAT_CHERCHE_PLACE,
@@ -22,26 +24,25 @@ typedef enum
     ETAT_SORTIE
 } EtatVehicule;
 
+/* Structure principale d'un vehicule (Liste chainee) */
 typedef struct voiture
 {
-    // --- CHAMPS EXISTANTS (Ne change rien ici pour le Mode 1) ---
     int id;
     int x, y;
     int type;
-    EtatVehicule etat; // Garde ton enum, c'est très bien
+    EtatVehicule etat;
     unsigned long int tps;
-    char direction;
+    char direction; /* N, S, E, O */
     int clignotement;
 
-    // --- NOUVEAUX CHAMPS (Pour le Mode 2 Automatique) ---
-    int id_place_visee; // L'ID de la place où la voiture veut aller
-    long heure_arrivee; // L'heure exacte (time_t) pour le prix
-    int a_paye;         // 0 ou 1, pour savoir si elle a payé
+    int id_place_visee;
+    long heure_arrivee; /* Stockage du temps pour la facturation */
+    int a_paye;
 
-    // --- POINTEUR (Toujours à la fin par habitude) ---
-    struct voiture *suivant;
+    struct voiture *suivant; /* Pointeur liste chainee */
 } Vehicule;
 
+/* Modeles graphiques des voitures */
 typedef struct
 {
     int id;
@@ -50,6 +51,7 @@ typedef struct
     char *forme_v[5];
 } ModeleVehicule;
 
+/* Variables globales partagees */
 extern ParkingSpot all_spots[TOTAL_SPOTS];
 extern Vehicule *liste_vehicules;
 extern Vehicule *voiture_joueur;
@@ -57,6 +59,7 @@ extern ModeleVehicule modeles[3];
 extern char map_logique[HAUTEUR_MAX][LARGEUR_MAX];
 extern int spawn_x, spawn_y, sortie_x, sortie_y;
 
+/* Prototypes des fonctions */
 void init_modeles(void);
 void display_static_map(const char *f);
 void init_spots_from_map(const char *f);

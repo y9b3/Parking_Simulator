@@ -6,49 +6,47 @@
 #include <math.h>
 #include "../include/parking.h"
 
-// Liste locale
+/* Liste chainee locale pour le mode solo */
 static Vehicule *flotte_solo = NULL;
 
-// VARIABLES POUR SAUVEGARDER LE SPAWN PARFAIT
+/* Sauvegarde de la position de depart */
 static int spawn_ref_x = 0;
 static int spawn_ref_y = 0;
 
-// --- AJOUT MANUEL (Touche A) ---
+/* Ajout d'un nouveau vehicule a la flotte */
 void ajouter_voiture_manuel()
 {
-    // ON UTILISE LES COORDONNEES ENREGISTREES DU PREMIER VEHICULE
     int sx = spawn_ref_x;
     int sy = spawn_ref_y;
 
-    // Vérif si l'entrée est libre
+    /* Verification de la disponibilite de la zone de spawn */
     Vehicule *v = flotte_solo;
     while (v)
     {
-        // Zone de sécurité
         if (abs(v->x - sx) < 8 && abs(v->y - sy) < 5)
         {
             attron(COLOR_PAIR(3) | A_BOLD);
-            mvprintw(52, 0, "!!! ENTREE OCCUPEE !!! BOUGEZ LA VOITURE D'ABORD");
+            mvprintw(52, 0, "!!! ZONE D'ENTREE OCCUPEE !!!");
             attroff(COLOR_PAIR(3) | A_BOLD);
             return;
         }
         v = v->suivant;
     }
 
-    // Création
+    /* Allocation et initialisation du nouveau vehicule */
     Vehicule *new_v = malloc(sizeof(Vehicule));
     if (!new_v)
         return;
 
     new_v->x = sx;
     new_v->y = sy;
-    new_v->direction = 'O'; // OUEST (Gauche), comme la voiture 1
+    new_v->direction = 'O';
     new_v->type = 0;
     new_v->etat = ETAT_CHERCHE_PLACE;
     new_v->heure_arrivee = time(NULL);
     new_v->suivant = NULL;
 
-    // ID
+    /* Attribution d'un identifiant unique */
     int max = 0;
     Vehicule *t = flotte_solo;
     while (t)
@@ -59,7 +57,7 @@ void ajouter_voiture_manuel()
     }
     new_v->id = max + 1;
 
-    // Ajout liste
+    /* Insertion en fin de liste chaînée */
     if (!flotte_solo)
         flotte_solo = new_v;
     else
@@ -70,21 +68,22 @@ void ajouter_voiture_manuel()
         last->suivant = new_v;
     }
 
-    // Focus
     voiture_joueur = new_v;
 }
 
-// --- TABULATION ---
+/* Changement de vehicule controle (Tabulation) */
 void changer_focus()
 {
     if (!voiture_joueur || !flotte_solo)
         return;
+
     if (voiture_joueur->suivant)
         voiture_joueur = voiture_joueur->suivant;
     else
         voiture_joueur = flotte_solo;
 }
 
+/* Fonction principale du mode solo */
 void jouer_mode_solo()
 {
     clear();
@@ -93,27 +92,23 @@ void jouer_mode_solo()
     flotte_solo = NULL;
     voiture_joueur = NULL;
 
+    /* Chargement du decor et des emplacements */
     display_static_map("assets/parking_map.txt");
     init_spots_from_map("assets/parking_map.txt");
     draw_all_spots(-1);
     sauvegarder_background();
 
-    // 1. SPAWN ORIGINAL
+    /* Premier spawn et initialisation des references */
     spawner_vehicule();
 
     if (voiture_joueur != NULL)
     {
-        // === ICI LA MAGIE : ON COPIE LES COORDONNEES PARFAITES ===
         spawn_ref_x = voiture_joueur->x;
         spawn_ref_y = voiture_joueur->y;
-
         voiture_joueur->heure_arrivee = time(NULL);
         voiture_joueur->id = 1;
         voiture_joueur->suivant = NULL;
-
-        // On force la direction vers la gauche (Ouest) si ce n'est pas le cas
         voiture_joueur->direction = 'O';
-
         flotte_solo = voiture_joueur;
     }
 
@@ -121,25 +116,25 @@ void jouer_mode_solo()
     int ch = 0;
     int running = 1;
 
+    /* Boucle de jeu principale */
     while (running)
     {
         ch = getch();
         if (ch == 'e')
             running = 0;
 
-        // --- COMMANDES ---
+        /* Gestion des commandes utilisateur */
         if (ch == 'a' || ch == 'A')
         {
             draw_all_spots(-1);
             ajouter_voiture_manuel();
         }
         if (ch == 9)
-            changer_focus(); // TAB
+            changer_focus();
 
-        // --- LOGIQUE ---
         if (voiture_joueur != NULL)
         {
-            // GARER
+            /* Interaction avec les places de parking */
             if (ch == 'g' || ch == ' ')
             {
                 int id_p = verifier_place_proche(voiture_joueur);
@@ -164,7 +159,7 @@ void jouer_mode_solo()
                 }
             }
 
-            // TICKET (F)
+            /* Gestion du ticket et de la facturation */
             if (ch == 'f' || ch == 'F')
             {
                 if (voiture_joueur->x < 30 && voiture_joueur->y < 15)
@@ -175,6 +170,7 @@ void jouer_mode_solo()
                         sec = 0;
                     double prix = sec * 0.50;
 
+                    /* Affichage du ticket de sortie */
                     nodelay(stdscr, FALSE);
                     attron(COLOR_PAIR(3) | A_BOLD);
                     int bx = 50, by = 2;
@@ -188,13 +184,10 @@ void jouer_mode_solo()
                     while (getch() != 10)
                         ;
 
-                    // Respawn au point de référence
+                    /* Sortie et reinitialisation du vehicule au spawn */
                     effacer_vehicule(voiture_joueur);
-
-                    // ON UTILISE LES COORDONNEES COPIEES
                     voiture_joueur->x = spawn_ref_x;
                     voiture_joueur->y = spawn_ref_y;
-
                     voiture_joueur->direction = 'O';
                     voiture_joueur->etat = ETAT_CHERCHE_PLACE;
                     voiture_joueur->heure_arrivee = time(NULL);
@@ -206,7 +199,7 @@ void jouer_mode_solo()
                 }
             }
 
-            // DEPLACEMENTS (ORIGINAUX)
+            /* Deplacements du vehicule actif */
             if (voiture_joueur->etat != ETAT_GARE)
             {
                 if (ch == 'z' || ch == KEY_UP)
@@ -222,7 +215,7 @@ void jouer_mode_solo()
 
         mettre_a_jour_vehicules();
 
-        // AFFICHAGE
+        /* Affichage de l'ensemble de la flotte */
         Vehicule *p = flotte_solo;
         while (p)
         {
@@ -230,7 +223,7 @@ void jouer_mode_solo()
             p = p->suivant;
         }
 
-        // HUD
+        /* Interface utilisateur (HUD) */
         move(53, 0);
         clrtoeol();
         if (voiture_joueur)
@@ -247,13 +240,14 @@ void jouer_mode_solo()
         move(55, 0);
         clrtoeol();
         attron(A_REVERSE);
-        printw(" COMMANDES | 'A': Ajouter Voiture | 'TAB': Changer | 'F': Payer | 'G': Garer ");
+        printw(" COMMANDES | 'A': Ajouter | 'TAB': Changer | 'F': Payer | 'G': Garer ");
         attroff(A_REVERSE);
 
         refresh();
         usleep(30000);
     }
 
+    /* Nettoyage des pointeurs avant sortie */
     flotte_solo = NULL;
     voiture_joueur = NULL;
 }
